@@ -4,6 +4,7 @@ const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const fs = require('fs');
+const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
@@ -33,8 +34,14 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 const DB_PATH = process.env.DISK_PATH || '/data/atendimentos.db';
-const db = new sqlite3.Database(DB_PATH);
+const DB_DIR = path.dirname(DB_PATH);
 
+if (!fs.existsSync(DB_DIR)) {
+  fs.mkdirSync(DB_DIR, { recursive: true });
+  console.log(`📁 Diretório criado: ${DB_DIR}`);
+}
+
+const db = new sqlite3.Database(DB_PATH);
 console.log(`📁 Banco de dados: ${DB_PATH}`);
 
 db.serialize(() => {
@@ -235,81 +242,154 @@ app.delete('/api/admin/usuarios/:id', verificarAdmin, (req, res) => {
   });
 });
 
-// ========== LISTAS (COM NOVO FORMATO) ==========
+// ========== FUNÇÕES PARA EXTRAIR DDD ==========
 
-// Função para processar o novo formato de lista
-function processarNovoFormatoLista(conteudo, ddd, banco) {
+function extrairDDDDoTelefone(telefone) {
+  if (!telefone) return null;
+  const apenasNumeros = telefone.replace(/\D/g, '');
+  if (apenasNumeros.length >= 10) {
+    return apenasNumeros.substring(0, 2);
+  }
+  return null;
+}
+
+function extrairTelefoneDaFicha(ficha) {
+  const linhas = ficha.split('\n');
+  for (const linha of linhas) {
+    const matchTelefone = linha.match(/^-\s*TELEFONE:\s*\(?(\d{2})\)?\s*(\d{4,5})-?(\d{4})/i);
+    if (matchTelefone) {
+      return matchTelefone[1] + matchTelefone[2] + matchTelefone[3];
+    }
+    const telefoneMatch = linha.match(/\(?(\d{2})\)?\s*(\d{4,5})-?(\d{4})/);
+    if (telefoneMatch) {
+      return telefoneMatch[1] + telefoneMatch[2] + telefoneMatch[3];
+    }
+  }
+  return null;
+}
+
+// ========== PROCESSAR LISTA COM DETECÇÃO AUTOMÁTICA DE DDD ==========
+function processarNovoFormatoLista(conteudo) {
   const linhas = conteudo.split('\n');
   const fichas = [];
   let fichaAtual = '';
-  let dentroFicha = false;
   
   for (let i = 0; i < linhas.length; i++) {
     const linha = linhas[i].trim();
     
-    // Detecta início de nova ficha (começa com número seguido de ponto ou hífen)
-    if (linha.match(/^\d+\.\s+[A-Za-z]/) || linha.match(/^\d+-\s+[A-Za-z]/)) {
-      if (fichaAtual) {
-        fichas.push(fichaAtual);
-      }
+    if (linha.match(/^\d+\.\s+[A-Za-z]/)) {
+      if (fichaAtual) fichas.push(fichaAtual);
       fichaAtual = linha;
-      dentroFicha = true;
     } 
-    else if (dentroFicha && linha.startsWith('- ')) {
+    else if (fichaAtual && linha.startsWith('- ')) {
       fichaAtual += '\n' + linha;
     }
-    else if (dentroFicha && linha === '---') {
-      if (fichaAtual) {
-        fichas.push(fichaAtual);
-      }
+    else if (fichaAtual && linha === '---') {
+      if (fichaAtual) fichas.push(fichaAtual);
       fichaAtual = '';
-      dentroFicha = false;
     }
-    else if (dentroFicha && linha !== '') {
+    else if (fichaAtual && linha !== '') {
       fichaAtual += '\n' + linha;
     }
   }
-  if (fichaAtual && fichaAtual.trim()) {
-    fichas.push(fichaAtual);
+  if (fichaAtual && fichaAtual.trim()) fichas.push(fichaAtual);
+  
+  // Processar cada ficha para extrair telefone e DDD
+  const fichasComDDD = [];
+  for (const ficha of fichas) {
+    const telefone = extrairTelefoneDaFicha(ficha);
+    const ddd = extrairDDDDoTelefone(telefone);
+    fichasComDDD.push({
+      conteudo: ficha,
+      telefone: telefone,
+      ddd: ddd || '00'
+    });
   }
   
-  const conteudoUnificado = fichas.join('\n\n---\n\n');
-  return { fichas, conteudoUnificado };
+  return { fichas: fichasComDDD };
 }
 
-app.post('/api/admin/importar-lista', verificarAdmin, upload.single('arquivo'), (req, res) => {
+// ========== ROTA DE IMPORTAÇÃO COM DETECÇÃO AUTOMÁTICA DE DDD ==========
+app.post('/api/admin/importar-lista', verificarAdmin, upload.single('arquivo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ erro: 'Envie um arquivo TXT' });
   
-  const ddd = req.query.ddd || '00';
   const banco = req.query.banco || 'pagbank';
   const conteudo = fs.readFileSync(req.file.path, 'utf8');
-  const { fichas, conteudoUnificado } = processarNovoFormatoLista(conteudo, ddd, banco);
+  const { fichas } = processarNovoFormatoLista(conteudo);
   
   if (fichas.length === 0) {
+    fs.unlinkSync(req.file.path);
     return res.status(400).json({ erro: 'Nenhuma ficha encontrada no formato correto.' });
   }
   
-  db.get(`SELECT id, quantidade_disponivel, conteudo FROM listas WHERE ddd = ? AND banco = ?`, [ddd, banco], (err, listaExistente) => {
-    if (err) return res.status(500).json({ erro: err.message });
-    
-    if (listaExistente) {
-      const novoConteudo = listaExistente.conteudo + '\n\n---\n\n' + conteudoUnificado;
-      const novaQuantidade = listaExistente.quantidade_disponivel + fichas.length;
-      db.run(`UPDATE listas SET quantidade_disponivel = ?, conteudo = ? WHERE ddd = ? AND banco = ?`, 
-        [novaQuantidade, novoConteudo, ddd, banco], (err2) => {
-        if (err2) return res.status(500).json({ erro: err2.message });
-        res.json({ success: true, total: fichas.length, mensagem: `${fichas.length} fichas adicionadas ao ${banco.toUpperCase()} DDD ${ddd}` });
-      });
-    } else {
-      db.run(`INSERT INTO listas (nome_arquivo, ddd, banco, quantidade_total, quantidade_disponivel, conteudo) VALUES (?, ?, ?, ?, ?, ?)`,
-        [req.file.originalname, ddd, banco, fichas.length, fichas.length, conteudoUnificado], function(err2) {
-        if (err2) return res.status(500).json({ erro: err2.message });
-        res.json({ success: true, total: fichas.length, mensagem: `${fichas.length} fichas importadas para ${banco.toUpperCase()} DDD ${ddd}` });
-      });
+  // Agrupar fichas por DDD
+  const fichasPorDDD = new Map();
+  for (const ficha of fichas) {
+    const ddd = ficha.ddd;
+    if (!fichasPorDDD.has(ddd)) {
+      fichasPorDDD.set(ddd, []);
     }
-  });
+    fichasPorDDD.get(ddd).push(ficha.conteudo);
+  }
+  
+  const resultados = [];
+  let totalImportadas = 0;
+  
+  const processarDDD = (ddd, fichasDoDDD) => {
+    return new Promise((resolve) => {
+      const conteudoUnificado = fichasDoDDD.join('\n\n---\n\n');
+      
+      db.get(`SELECT id, quantidade_disponivel, conteudo FROM listas WHERE ddd = ? AND banco = ?`, [ddd, banco], (err, listaExistente) => {
+        if (err) {
+          resultados.push({ ddd, erro: err.message });
+          return resolve();
+        }
+        
+        if (listaExistente) {
+          const novoConteudo = listaExistente.conteudo + '\n\n---\n\n' + conteudoUnificado;
+          const novaQuantidade = listaExistente.quantidade_disponivel + fichasDoDDD.length;
+          db.run(`UPDATE listas SET quantidade_disponivel = ?, conteudo = ? WHERE ddd = ? AND banco = ?`, 
+            [novaQuantidade, novoConteudo, ddd, banco], (err2) => {
+            if (err2) {
+              resultados.push({ ddd, erro: err2.message });
+            } else {
+              totalImportadas += fichasDoDDD.length;
+              resultados.push({ ddd, quantidade: fichasDoDDD.length, sucesso: true });
+            }
+            resolve();
+          });
+        } else {
+          db.run(`INSERT INTO listas (nome_arquivo, ddd, banco, quantidade_total, quantidade_disponivel, conteudo) VALUES (?, ?, ?, ?, ?, ?)`,
+            [req.file.originalname, ddd, banco, fichasDoDDD.length, fichasDoDDD.length, conteudoUnificado], function(err2) {
+            if (err2) {
+              resultados.push({ ddd, erro: err2.message });
+            } else {
+              totalImportadas += fichasDoDDD.length;
+              resultados.push({ ddd, quantidade: fichasDoDDD.length, sucesso: true });
+            }
+            resolve();
+          });
+        }
+      });
+    });
+  };
+  
+  // Processar todos os DDDs em sequência
+  for (const [ddd, fichasDoDDD] of fichasPorDDD) {
+    await processarDDD(ddd, fichasDoDDD);
+  }
   
   fs.unlinkSync(req.file.path);
+  
+  const resumoDDD = resultados.filter(r => r.sucesso).map(r => `DDD ${r.ddd}: ${r.quantidade} fichas`).join(', ');
+  const erros = resultados.filter(r => r.erro);
+  
+  let mensagem = `✅ ${totalImportadas} fichas importadas! ${resumoDDD}`;
+  if (erros.length) {
+    mensagem += ` ⚠️ Erros: ${erros.map(e => `${e.ddd}: ${e.erro}`).join(', ')}`;
+  }
+  
+  res.json({ success: true, total: totalImportadas, detalhes: resultados, mensagem });
 });
 
 app.get('/api/listas-disponiveis', verificarLogin, (req, res) => {
