@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - MIA FIOD</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 28px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .logo { text-align: center; font-size: 48px; margin-bottom: 20px; }
+        h1 { text-align: center; color: #CC092F; margin-bottom: 30px; font-size: 24px; }
+        input {
+            width: 100%;
+            padding: 14px;
+            margin-bottom: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 14px;
+            font-size: 16px;
+        }
+        input:focus { outline: none; border-color: #CC092F; }
+        button {
+            width: 100%;
+            background: linear-gradient(135deg, #CC092F 0%, #8B0620 100%);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .link { text-align: center; margin-top: 20px; }
+        .link a { color: #CC092F; text-decoration: none; }
+        .erro { background: #fdecea; color: #e74c3c; padding: 10px; border-radius: 10px; margin-bottom: 15px; text-align: center; display: none; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">👑</div>
+        <h1>MIA FIOD</h1>
+        <div id="erroMsg" class="erro"></div>
+        <input type="email" id="email" placeholder="E-mail" autocomplete="off">
+        <input type="password" id="senha" placeholder="Senha">
+        <button onclick="fazerLogin()">Entrar</button>
+        <div class="link">
+            <a href="cadastro.html">Não tem conta? Cadastre-se</a>
+        </div>
+    </div>
+    <script>
+        async function fazerLogin() {
+            const email = document.getElementById('email').value;
+            const senha = document.getElementById('senha').value;
+            const erroDiv = document.getElementById('erroMsg');
+            if (!email || !senha) { erroDiv.style.display = 'block'; erroDiv.innerHTML = 'Preencha todos os campos!'; return; }
+            try {
+                const response = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, senha }) });
+                const data = await response.json();
+                if (response.ok) {
+                    if (data.tipo === 'admin') window.location.href = 'gerente.html';
+                    else window.location.href = 'ligador.html';
+                } else { erroDiv.style.display = 'block'; erroDiv.innerHTML = data.erro; }
+            } catch (error) { erroDiv.style.display = 'block'; erroDiv.innerHTML = 'Erro de conexão!'; }
+        }
+        document.getElementById('email').addEventListener('keypress', e => { if (e.key === 'Enter') fazerLogin(); });
+        document.getElementById('senha').addEventListener('keypress', e => { if (e.key === 'Enter') fazerLogin(); });
+    </script>
+</body>
+</html>
