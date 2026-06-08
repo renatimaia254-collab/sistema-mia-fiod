@@ -256,10 +256,17 @@ function extrairDDDDoTelefone(telefone) {
 function extrairTelefoneDaFicha(ficha) {
   const linhas = ficha.split('\n');
   for (const linha of linhas) {
-    const matchTelefone = linha.match(/^-\s*TELEFONE:\s*\(?(\d{2})\)?\s*(\d{4,5})-?(\d{4})/i);
-    if (matchTelefone) {
-      return matchTelefone[1] + matchTelefone[2] + matchTelefone[3];
+    // Formato antigo: - Telefone: (75) 98161-3230
+    let match = linha.match(/^-\s*TELEFONE:\s*\(?(\d{2})\)?\s*(\d{4,5})-?(\d{4})/i);
+    if (match) {
+      return match[1] + match[2] + match[3];
     }
+    // Novo formato: - Telefones: (75) 98161-3230, (75) 8161-3230 (pega o primeiro)
+    match = linha.match(/^-\s*TELEFONES:\s*\(?(\d{2})\)?\s*(\d{4,5})-?(\d{4})/i);
+    if (match) {
+      return match[1] + match[2] + match[3];
+    }
+    // Qualquer padrão de telefone na linha
     const telefoneMatch = linha.match(/\(?(\d{2})\)?\s*(\d{4,5})-?(\d{4})/);
     if (telefoneMatch) {
       return telefoneMatch[1] + telefoneMatch[2] + telefoneMatch[3];
@@ -268,31 +275,44 @@ function extrairTelefoneDaFicha(ficha) {
   return null;
 }
 
-// ========== PROCESSAR LISTA COM DETECÇÃO AUTOMÁTICA DE DDD ==========
-function processarNovoFormatoLista(conteudo) {
+// ========== PROCESSAR LISTA (ACEITA DOIS FORMATOS) ==========
+function processarLista(conteudo) {
   const linhas = conteudo.split('\n');
   const fichas = [];
   let fichaAtual = '';
+  let dentroFicha = false;
   
   for (let i = 0; i < linhas.length; i++) {
-    const linha = linhas[i].trim();
+    const linha = linhas[i];
     
-    if (linha.match(/^\d+\.\s+[A-Za-z]/)) {
-      if (fichaAtual) fichas.push(fichaAtual);
-      fichaAtual = linha;
-    } 
-    else if (fichaAtual && linha.startsWith('- ')) {
-      fichaAtual += '\n' + linha;
-    }
-    else if (fichaAtual && linha === '---') {
-      if (fichaAtual) fichas.push(fichaAtual);
+    // Detecta separador ==================================
+    if (linha.trim().startsWith('==================================')) {
+      if (fichaAtual) {
+        fichas.push(fichaAtual.trim());
+      }
       fichaAtual = '';
+      dentroFicha = true;
+      continue;
     }
-    else if (fichaAtual && linha !== '') {
+    
+    // Detecta início de ficha com número sequencial (ex: "1. Nome")
+    if (linha.trim().match(/^\d+\.\s+[A-Za-z]/) && !dentroFicha) {
+      if (fichaAtual) {
+        fichas.push(fichaAtual.trim());
+      }
+      fichaAtual = linha;
+      dentroFicha = true;
+    }
+    // Se está dentro de uma ficha, adiciona a linha
+    else if (dentroFicha && linha.trim() !== '') {
       fichaAtual += '\n' + linha;
     }
+    // Se a linha estiver vazia e não estamos dentro de ficha, ignora
   }
-  if (fichaAtual && fichaAtual.trim()) fichas.push(fichaAtual);
+  
+  if (fichaAtual && fichaAtual.trim()) {
+    fichas.push(fichaAtual.trim());
+  }
   
   // Processar cada ficha para extrair telefone e DDD
   const fichasComDDD = [];
@@ -306,16 +326,16 @@ function processarNovoFormatoLista(conteudo) {
     });
   }
   
-  return { fichas: fichasComDDD };
+  return fichasComDDD;
 }
 
-// ========== ROTA DE IMPORTAÇÃO COM DETECÇÃO AUTOMÁTICA DE DDD ==========
+// ========== ROTA DE IMPORTAÇÃO (ACEITA AMBOS OS FORMATOS) ==========
 app.post('/api/admin/importar-lista', verificarAdmin, upload.single('arquivo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ erro: 'Envie um arquivo TXT' });
   
   const banco = req.query.banco || 'pagbank';
   const conteudo = fs.readFileSync(req.file.path, 'utf8');
-  const { fichas } = processarNovoFormatoLista(conteudo);
+  const fichas = processarLista(conteudo);
   
   if (fichas.length === 0) {
     fs.unlinkSync(req.file.path);
@@ -337,7 +357,7 @@ app.post('/api/admin/importar-lista', verificarAdmin, upload.single('arquivo'), 
   
   const processarDDD = (ddd, fichasDoDDD) => {
     return new Promise((resolve) => {
-      const conteudoUnificado = fichasDoDDD.join('\n\n---\n\n');
+      const conteudoUnificado = fichasDoDDD.join('\n\n==================================\n\n');
       
       db.get(`SELECT id, quantidade_disponivel, conteudo FROM listas WHERE ddd = ? AND banco = ?`, [ddd, banco], (err, listaExistente) => {
         if (err) {
@@ -346,7 +366,7 @@ app.post('/api/admin/importar-lista', verificarAdmin, upload.single('arquivo'), 
         }
         
         if (listaExistente) {
-          const novoConteudo = listaExistente.conteudo + '\n\n---\n\n' + conteudoUnificado;
+          const novoConteudo = listaExistente.conteudo + '\n\n==================================\n\n' + conteudoUnificado;
           const novaQuantidade = listaExistente.quantidade_disponivel + fichasDoDDD.length;
           db.run(`UPDATE listas SET quantidade_disponivel = ?, conteudo = ? WHERE ddd = ? AND banco = ?`, 
             [novaQuantidade, novoConteudo, ddd, banco], (err2) => {
@@ -491,15 +511,15 @@ app.put('/api/admin/autorizar-solicitacao/:id', verificarAdmin, (req, res) => {
         
         const quantidadeReal = Math.min(solicitacao.quantidade, lista.quantidade_disponivel);
         
-        const fichasSeparadas = lista.conteudo.split('\n\n---\n\n');
+        const fichasSeparadas = lista.conteudo.split('\n\n==================================\n\n');
         const fichasEntregues = fichasSeparadas.slice(0, quantidadeReal);
-        const conteudoEntregue = fichasEntregues.join('\n\n---\n\n');
+        const conteudoEntregue = fichasEntregues.join('\n\n==================================\n\n');
         
         db.run(`INSERT INTO minhas_listas (usuario_id, lista_id, banco, conteudo) VALUES (?, ?, ?, ?)`,
           [solicitacao.usuario_id, solicitacao.lista_id, lista.banco, conteudoEntregue]);
         
         const novaQuantidade = lista.quantidade_disponivel - quantidadeReal;
-        const novoConteudo = fichasSeparadas.slice(quantidadeReal).join('\n\n---\n\n');
+        const novoConteudo = fichasSeparadas.slice(quantidadeReal).join('\n\n==================================\n\n');
         
         db.run(`UPDATE listas SET quantidade_disponivel = ?, conteudo = ? WHERE id = ?`, 
           [novaQuantidade, novoConteudo, solicitacao.lista_id]);
