@@ -32,7 +32,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-const DB_PATH = process.env.DISK_PATH || '/opt/render/project/src/data/atendimentos.db';
+const DB_PATH = process.env.DISK_PATH || '/data/atendimentos.db';
 const db = new sqlite3.Database(DB_PATH);
 
 console.log(`📁 Banco de dados: ${DB_PATH}`);
