@@ -473,34 +473,67 @@
         
         // ========== USUÁRIOS ==========
         
-        async function carregarUsuarios() {
-            try {
-                const res = await fetch('/api/admin/usuarios');
-                const usuarios = await res.json();
-                const container = document.getElementById('listaUsuarios');
-                if (!usuarios.length) { container.innerHTML = '<p>Nenhum usuário cadastrado.</p>'; return; }
-                let html = '<table class="relatorio-tabela"><thead><tr><th>Nome</th><th>Email</th><th>WhatsApp</th><th>Tipo</th><th>Status</th><th>Ações</th></table></thead><tbody>';
-                for (const u of usuarios) {
-                    html += `<tr>
-                        <td>${u.nome}</td>
-                        <td>${u.email}</td>
-                        <td>${formatarTelefone(u.whatsapp)}</span></td>
-                        <td>${u.tipo === 'admin' ? '👑 Admin' : '👤 Usuário'}</td>
-                        <td>${u.status === 'ativo' ? '🟢 Ativo' : '🔴 Bloqueado'}</td>
-                        <td>${u.tipo !== 'admin' ? `<button onclick="alterarStatus(${u.id}, '${u.status === 'ativo' ? 'bloqueado' : 'ativo'}')">${u.status === 'ativo' ? '🔒' : '🔓'}</button>
-                        <button onclick="resetarSenha(${u.id})">🔑</button>
-                        <button onclick="excluirUsuario(${u.id})">🗑️</button>` : '⚙️ Admin'}</td>
-                    </td>`;
-                }
-                html += '</tbody></table>';
-                container.innerHTML = html;
-            } catch(e) { console.error(e); document.getElementById('listaUsuarios').innerHTML = '<p>Erro ao carregar usuários</p>'; }
+       async function carregarUsuarios() {
+    try {
+        const res = await fetch('/api/admin/usuarios');
+        const usuarios = await res.json();
+        const container = document.getElementById('listaUsuarios');
+        if (!usuarios.length) { 
+            container.innerHTML = '<p>Nenhum usuário cadastrado.</p>'; 
+            return; 
         }
         
-        async function alterarStatus(id, status) { try { await fetch(`/api/admin/usuarios/${id}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }); showToast('Status alterado!'); carregarUsuarios(); } catch(e) { showToast('Erro', true); } }
-        async function resetarSenha(id) { if (!confirm('Resetar senha para 123456?')) return; try { await fetch(`/api/admin/usuarios/${id}/reset-senha`, { method: 'PUT' }); showToast('Senha resetada!'); } catch(e) { showToast('Erro', true); } }
-        async function excluirUsuario(id) { if (!confirm('Excluir usuário?')) return; try { await fetch(`/api/admin/usuarios/${id}`, { method: 'DELETE' }); showToast('Usuário excluído!'); carregarUsuarios(); } catch(e) { showToast('Erro', true); } }
+        // Usando tabela com estilo correto
+        let html = `
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden;">
+                    <thead>
+                        <tr style="background: linear-gradient(135deg, #CC092F 0%, #8B0620 100%); color: white;">
+                            <th style="padding: 12px; text-align: left;">Nome</th>
+                            <th style="padding: 12px; text-align: left;">E-mail</th>
+                            <th style="padding: 12px; text-align: left;">WhatsApp</th>
+                            <th style="padding: 12px; text-align: left;">Tipo</th>
+                            <th style="padding: 12px; text-align: left;">Status</th>
+                            <th style="padding: 12px; text-align: center;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
         
+        for (const u of usuarios) {
+            html += `
+                <tr style="border-bottom: 1px solid #ddd;">
+                    <td style="padding: 10px;">${escapeHtml(u.nome)}</td>
+                    <td style="padding: 10px;">${escapeHtml(u.email)}</td>
+                    <td style="padding: 10px;">${formatarTelefone(u.whatsapp)}</td>
+                    <td style="padding: 10px;">${u.tipo === 'admin' ? '👑 Admin' : '👤 Usuário'}</td>
+                    <td style="padding: 10px;">
+                        <span style="background: ${u.status === 'ativo' ? '#27ae60' : '#e74c3c'}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px;">
+                            ${u.status === 'ativo' ? '🟢 Ativo' : '🔴 Bloqueado'}
+                        </span>
+                    </td>
+                    <td style="padding: 10px; text-align: center;">
+                        ${u.tipo !== 'admin' ? `
+                            <button onclick="alterarStatus(${u.id}, '${u.status === 'ativo' ? 'bloqueado' : 'ativo'}')" style="background-color: #f39c12; margin: 2px; padding: 4px 8px;">${u.status === 'ativo' ? '🔒' : '🔓'}</button>
+                            <button onclick="resetarSenha(${u.id})" style="background-color: #2980b9; margin: 2px; padding: 4px 8px;">🔑</button>
+                            <button onclick="excluirUsuario(${u.id})" style="background-color: #e74c3c; margin: 2px; padding: 4px 8px;">🗑️</button>
+                        ` : '⚙️ Admin'}
+                    </td>
+                </tr>
+            `;
+        }
+        
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+        container.innerHTML = html;
+    } catch(e) { 
+        console.error(e); 
+        document.getElementById('listaUsuarios').innerHTML = '<p>Erro ao carregar usuários</p>';
+    }
+}
         // ========== RELATÓRIOS ==========
         
         async function carregarRelatorioAgendamentos() {
