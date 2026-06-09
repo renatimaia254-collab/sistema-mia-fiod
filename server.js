@@ -753,7 +753,66 @@ app.delete('/api/fichas/:id', (req, res) => {
     res.json({ success: true });
   });
 });
+// ========== MURAL DE SCRIPTS (NOVO) ==========
 
+// Criar tabela de scripts
+db.run(`
+  CREATE TABLE IF NOT EXISTS scripts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    titulo TEXT NOT NULL,
+    conteudo TEXT NOT NULL,
+    categoria TEXT DEFAULT 'geral',
+    criado_em TEXT DEFAULT CURRENT_TIMESTAMP,
+    ativo INTEGER DEFAULT 1
+  )
+`);
+
+// Listar todos os scripts (para ligadores - só os ativos)
+app.get('/api/scripts', (req, res) => {
+  db.all(`SELECT id, titulo, conteudo, categoria, criado_em FROM scripts WHERE ativo = 1 ORDER BY id DESC`, (err, rows) => {
+    if (err) return res.status(500).json({ erro: err.message });
+    res.json(rows);
+  });
+});
+
+// Listar scripts para admin (todos)
+app.get('/api/admin/scripts', verificarAdmin, (req, res) => {
+  db.all(`SELECT * FROM scripts ORDER BY id DESC`, (err, rows) => {
+    if (err) return res.status(500).json({ erro: err.message });
+    res.json(rows);
+  });
+});
+
+// Criar novo script (admin)
+app.post('/api/admin/scripts', verificarAdmin, (req, res) => {
+  const { titulo, conteudo, categoria } = req.body;
+  if (!titulo || !conteudo) {
+    return res.status(400).json({ erro: 'Título e conteúdo são obrigatórios' });
+  }
+  db.run(`INSERT INTO scripts (titulo, conteudo, categoria) VALUES (?, ?, ?)`,
+    [titulo, conteudo, categoria || 'geral'], function(err) {
+    if (err) return res.status(500).json({ erro: err.message });
+    res.json({ success: true, id: this.lastID });
+  });
+});
+
+// Editar script (admin)
+app.put('/api/admin/scripts/:id', verificarAdmin, (req, res) => {
+  const { titulo, conteudo, categoria, ativo } = req.body;
+  db.run(`UPDATE scripts SET titulo = ?, conteudo = ?, categoria = ?, ativo = ? WHERE id = ?`,
+    [titulo, conteudo, categoria || 'geral', ativo !== undefined ? ativo : 1, req.params.id], function(err) {
+    if (err) return res.status(500).json({ erro: err.message });
+    res.json({ success: true });
+  });
+});
+
+// Excluir script (admin)
+app.delete('/api/admin/scripts/:id', verificarAdmin, (req, res) => {
+  db.run(`DELETE FROM scripts WHERE id = ?`, [req.params.id], function(err) {
+    if (err) return res.status(500).json({ erro: err.message });
+    res.json({ success: true });
+  });
+});
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🔥 Servidor MIA FIOD rodando na porta ${PORT}`);
 });
