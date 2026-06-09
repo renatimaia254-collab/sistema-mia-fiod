@@ -104,6 +104,7 @@
         }
         
         .badge-pagbank { background: #1E90FF; color: white; padding: 2px 8px; border-radius: 12px; font-size: 10px; display: inline-block; margin-left: 5px; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
         
         .toast { position: fixed; bottom: 20px; left: 20px; right: 20px; background: #27ae60; color: white; padding: 12px; border-radius: 12px; text-align: center; z-index: 9999; animation: fadeIn 0.3s; }
         .toast-erro { background: #e74c3c; }
@@ -124,8 +125,10 @@
             <button class="tab-btn" onclick="switchTab('listas')">📦 DEPÓSITO DE LISTAS</button>
             <button class="tab-btn" onclick="switchTab('usuarios')">👥 USUÁRIOS</button>
             <button class="tab-btn" onclick="switchTab('relatorios')">📊 RELATÓRIOS</button>
+            <button class="tab-btn" onclick="switchTab('mural')">📝 MURAL DE SCRIPTS</button>
         </div>
         
+        <!-- ABA 1: FILA DE ESPERA -->
         <div id="tab-fila" class="tab-content active">
             <div class="filtro-data">
                 <label>🔍 Filtrar por data:</label>
@@ -136,11 +139,12 @@
             <div id="filaLista"></div>
         </div>
         
+        <!-- ABA 2: DEPÓSITO DE LISTAS -->
         <div id="tab-listas" class="tab-content">
             <h2>📦 Importar Lista (TXT)</h2>
             <div class="upload-area">
                 <p>📁 Selecione um arquivo TXT no formato:</p>
-                <p style="font-size:12px; color:#666;">1. Nome do Cliente<br>- CNPJ: 00.000.000/0001-00<br>- CPF do sócio: 000.000.000-00<br>- E-mail: email@email.com<br>- Data de nascimento: 00/00/0000<br>- Nome da mãe: Nome da Mãe<br>- Endereço: Rua, 000 - Cidade/UF<br>- Telefone: (00) 00000-0000<br>- Gerente: Nome do Gerente<br>- Saldo: R$ 0,00<br>- Observação: Texto (opcional)<br>---</p>
+                <p style="font-size:12px; color:#666;">Formato 1: 1. Nome do Cliente<br>- CNPJ: 00.000.000/0001-00<br>- Telefone: (11) 99999-9999<br>---<br>Formato 2: ==================================<br>- CNPJ: 00.000.000/0001-00<br>- Telefones: (11) 99999-9999<br>==================================</p>
                 <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 10px;">
                     <select id="bancoImportar" style="padding: 8px; border-radius: 8px;">
                         <option value="pagbank">🏦 PAGBANK</option>
@@ -166,11 +170,13 @@
             <div id="listasEstoque">Carregando...</div>
         </div>
         
+        <!-- ABA 3: USUÁRIOS -->
         <div id="tab-usuarios" class="tab-content">
             <h2>👥 Usuários Cadastrados</h2>
             <div id="listaUsuarios">Carregando...</div>
         </div>
         
+        <!-- ABA 4: RELATÓRIOS -->
         <div id="tab-relatorios" class="tab-content">
             <h2>📊 Relatório de Agendamentos</h2>
             <div class="filtro-data" style="margin-bottom:15px;">
@@ -185,6 +191,38 @@
             <h2 style="margin-top:30px;">📋 Relatório de Usuários</h2>
             <button onclick="carregarRelatorioUsuarios()" style="margin-bottom:15px;">📊 Carregar</button>
             <div id="relatorioUsuarios"></div>
+        </div>
+        
+        <!-- ABA 5: MURAL DE SCRIPTS -->
+        <div id="tab-mural" class="tab-content">
+            <h2>📝 Gerenciar Scripts Úteis</h2>
+            <p style="margin-bottom:15px; color:#666;">Adicione scripts, informações ou documentos úteis para os ligadores visualizarem.</p>
+            
+            <div style="background:#f8f9fa; padding:20px; border-radius:16px; margin-bottom:25px;">
+                <h3>➕ Adicionar Novo Script</h3>
+                <div class="form-group" style="margin-top:15px;">
+                    <label>Título *</label>
+                    <input type="text" id="novoScriptTitulo" placeholder="Ex: Taxas PagSeguro, Roteiro de Atendimento..." style="width:100%; padding:10px; border:1px solid #ccc; border-radius:8px;">
+                </div>
+                <div class="form-group" style="margin-top:10px;">
+                    <label>Categoria</label>
+                    <select id="novoScriptCategoria" style="padding:10px; border-radius:8px; width:100%;">
+                        <option value="geral">Geral</option>
+                        <option value="taxas">Taxas</option>
+                        <option value="roteiro">Roteiro</option>
+                        <option value="dicas">Dicas</option>
+                        <option value="urgente">Urgente</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-top:10px;">
+                    <label>Conteúdo (script completo) *</label>
+                    <textarea id="novoScriptConteudo" rows="6" placeholder="Cole aqui o script ou informação completa..." style="width:100%; padding:12px; border-radius:12px; border:1px solid #ccc;"></textarea>
+                </div>
+                <button onclick="adicionarScript()" style="background-color:#27ae60; width:auto; padding:10px 24px;">📌 Adicionar Script</button>
+            </div>
+            
+            <h3>📋 Scripts Disponíveis</h3>
+            <div id="listaScriptsAdmin"></div>
         </div>
     </div>
     
@@ -229,9 +267,20 @@
         }
         
         function getBancoBadge(banco) {
-            if (banco === 'pagbank') return '<span class="badge-pagbank">🏦 PAGBANK</span>';
             return '<span class="badge-pagbank">🏦 PAGBANK</span>';
         }
+        
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+        
+        // ========== SISTEMA DE AGENDAMENTO (FILA) ==========
         
         function connectSSE() {
             if (eventSource) eventSource.close();
@@ -330,6 +379,8 @@
         async function pausarAtendimento(id) { const c = prompt('Motivo da pausa:'); if (!c) return; try { await fetch(`/api/fichas/${id}/pausar`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comentario: c }) }); showToast('⏸️ Pausado'); carregarFichas(); } catch(e) { showToast('Erro', true); } }
         async function excluirFicha(id) { if (!confirm('Excluir?')) return; try { await fetch(`/api/fichas/${id}`, { method: 'DELETE' }); showToast('🗑️ Excluída'); carregarFichas(); } catch(e) { showToast('Erro', true); } }
         
+        // ========== LISTAS ==========
+        
         async function importarLista() {
             const file = arquivoSelecionado;
             const ddd = document.getElementById('dddLista').value;
@@ -340,7 +391,7 @@
             try {
                 const res = await fetch(`/api/admin/importar-lista?ddd=${ddd}&banco=${banco}`, { method: 'POST', body: formData });
                 const data = await res.json();
-                if (res.ok) { showToast(`✅ ${data.total} fichas importadas para ${banco.toUpperCase()} DDD ${ddd}!`); arquivoSelecionado = null; document.getElementById('arquivoSelecionado').innerHTML = ''; document.getElementById('arquivoLista').value = ''; carregarSolicitacoes(); carregarListasEstoque(); }
+                if (res.ok) { showToast(`✅ ${data.total} fichas importadas!`); arquivoSelecionado = null; document.getElementById('arquivoSelecionado').innerHTML = ''; document.getElementById('arquivoLista').value = ''; carregarSolicitacoes(); carregarListasEstoque(); }
                 else { showToast(data.erro, true); }
             } catch(e) { showToast('Erro na importação!', true); }
         }
@@ -351,7 +402,7 @@
                 const sols = await res.json();
                 const container = document.getElementById('solicitacoesPendentes');
                 if (!sols.length) { container.innerHTML = '<p>✅ Nenhuma solicitação pendente.</p>'; return; }
-                let html = '<table class="relatorio-tabela"><thead><tr><th>Data</th><th>Usuário</th><th>Banco</th><th>DDD</th><th>Qtd</th><th>Ações</th></tr></thead><tbody>';
+                let html = '<table class="relatorio-tabela"><thead><tr><th>Data</th><th>Usuário</th><th>Banco</th><th>DDD</th><th>Qtd</th><th>Ações</th></table></thead><tbody>';
                 for (const s of sols) {
                     html += `<tr>
                         <td>${new Date(s.data_solicitacao).toLocaleString()}</td>
@@ -385,7 +436,7 @@
                     html += `<tr>
                         <td><strong>🏦 PAGBANK</strong></td>
                         <td>📞 DDD ${g.ddd}</td>
-                        <td><strong>${g.quantidade}</strong> fichas</td>
+                        <td><strong>${g.quantidade}</strong> fichas</span></td>
                         <td><button onclick="verDetalhesDDD('${g.ddd}', '${g.banco}')" style="background-color:#2980b9;">📋 Ver Detalhes</button>
                         <button onclick="limparListaDDD('${g.ddd}', '${g.banco}')" style="background-color:#e74c3c;">🗑️ Limpar</button></td>
                     </tr>`;
@@ -420,7 +471,7 @@
         async function limparTodasListas() { if (!confirm(`⚠️ Remover TODAS as listas?`)) return; try { await fetch(`/api/admin/limpar-todas-listas`, { method: 'DELETE' }); showToast(`✅ Todas as listas removidas!`); carregarListasEstoque(); carregarSolicitacoes(); } catch(e) { showToast('Erro!', true); } }
         async function autorizar(id, acao) { try { const res = await fetch(`/api/admin/autorizar-solicitacao/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao }) }); if (res.ok) { showToast(acao === 'aprovar' ? '✅ Aprovada!' : '❌ Recusada!'); carregarSolicitacoes(); carregarListasEstoque(); carregarUsuarios(); } } catch(e) { showToast('Erro!', true); } }
         
-        function escapeHtml(str) { return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
+        // ========== USUÁRIOS ==========
         
         async function carregarUsuarios() {
             try {
@@ -428,12 +479,18 @@
                 const usuarios = await res.json();
                 const container = document.getElementById('listaUsuarios');
                 if (!usuarios.length) { container.innerHTML = '<p>Nenhum usuário cadastrado.</p>'; return; }
-                let html = '<table class="relatorio-tabela"><thead><tr><th>Nome</th><th>Email</th><th>WhatsApp</th><th>Tipo</th><th>Status</th><th>Ações</th></tr></thead><tbody>';
+                let html = '<table class="relatorio-tabela"><thead><tr><th>Nome</th><th>Email</th><th>WhatsApp</th><th>Tipo</th><th>Status</th><th>Ações</th></table></thead><tbody>';
                 for (const u of usuarios) {
-                    html += `<tr><td>${u.nome}</td><td>${u.email}</td><td>${formatarTelefone(u.whatsapp)}</td><td>${u.tipo === 'admin' ? '👑 Admin' : '👤 Usuário'}</td><td>${u.status === 'ativo' ? '🟢 Ativo' : '🔴 Bloqueado'}</td>
-                    <td>${u.tipo !== 'admin' ? `<button onclick="alterarStatus(${u.id}, '${u.status === 'ativo' ? 'bloqueado' : 'ativo'}')">${u.status === 'ativo' ? '🔒' : '🔓'}</button>
-                    <button onclick="resetarSenha(${u.id})">🔑</button>
-                    <button onclick="excluirUsuario(${u.id})">🗑️</button>` : '⚙️ Admin'}</td></tr>`;
+                    html += `<tr>
+                        <td>${u.nome}</td>
+                        <td>${u.email}</td>
+                        <td>${formatarTelefone(u.whatsapp)}</span></td>
+                        <td>${u.tipo === 'admin' ? '👑 Admin' : '👤 Usuário'}</td>
+                        <td>${u.status === 'ativo' ? '🟢 Ativo' : '🔴 Bloqueado'}</td>
+                        <td>${u.tipo !== 'admin' ? `<button onclick="alterarStatus(${u.id}, '${u.status === 'ativo' ? 'bloqueado' : 'ativo'}')">${u.status === 'ativo' ? '🔒' : '🔓'}</button>
+                        <button onclick="resetarSenha(${u.id})">🔑</button>
+                        <button onclick="excluirUsuario(${u.id})">🗑️</button>` : '⚙️ Admin'}</td>
+                    </td>`;
                 }
                 html += '</tbody></table>';
                 container.innerHTML = html;
@@ -443,6 +500,8 @@
         async function alterarStatus(id, status) { try { await fetch(`/api/admin/usuarios/${id}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }); showToast('Status alterado!'); carregarUsuarios(); } catch(e) { showToast('Erro', true); } }
         async function resetarSenha(id) { if (!confirm('Resetar senha para 123456?')) return; try { await fetch(`/api/admin/usuarios/${id}/reset-senha`, { method: 'PUT' }); showToast('Senha resetada!'); } catch(e) { showToast('Erro', true); } }
         async function excluirUsuario(id) { if (!confirm('Excluir usuário?')) return; try { await fetch(`/api/admin/usuarios/${id}`, { method: 'DELETE' }); showToast('Usuário excluído!'); carregarUsuarios(); } catch(e) { showToast('Erro', true); } }
+        
+        // ========== RELATÓRIOS ==========
         
         async function carregarRelatorioAgendamentos() {
             try {
@@ -458,7 +517,15 @@
                 let html = '<table class="relatorio-tabela"><thead><tr><th>📅 Data/Horário</th><th>👤 Cliente</th><th>📱 Telefone</th><th>📋 Assunto</th><th>🏷️ Banco/Ligador</th><th>✅ Status</th><th>📝 Observação</th></tr></thead><tbody>';
                 for (const f of filtradas) {
                     let statusText = f.status === 'aguardando' ? '🟡 Aguardando' : (f.status === 'em_andamento' ? '🔵 Em andamento' : '✅ Encerrado');
-                    html += `<tr><td>${new Date(f.horarioAgendado).toLocaleString()}</td><td>${f.nomeCliente}</td><td>${formatarTelefone(f.telefoneCliente)}</td><td>${f.assunto}</td><td>🏦 PAGBANK ${f.vulgo || ''}</td><td>${statusText}</td><td>${f.observacao || '-'}</td></tr>`;
+                    html += `<tr>
+                        <td>${new Date(f.horarioAgendado).toLocaleString()}</span></td>
+                        <td>${f.nomeCliente}</span></td>
+                        <td>${formatarTelefone(f.telefoneCliente)}</span></td>
+                        <td>${f.assunto}</span></td>
+                        <td>🏦 PAGBANK ${f.vulgo || ''}</span></td>
+                        <td>${statusText}</span></td>
+                        <td>${f.observacao || '-'}</span></td>
+                    </tr>`;
                 }
                 html += '</tbody></table>';
                 container.innerHTML = html;
@@ -488,21 +555,162 @@
                 if (!data.length) { container.innerHTML = '<p>Nenhum dado encontrado.</p>'; return; }
                 let html = '<table class="relatorio-tabela"><thead><tr><th>Usuário</th><th>Email</th><th>WhatsApp</th><th>Cadastro</th><th>Listas Obtidas</th><th>Solicitações Aprovadas</th></tr></thead><tbody>';
                 for (const u of data) {
-                    html += `<tr><td>${u.nome}</td><td>${u.email}</td><td>${formatarTelefone(u.whatsapp)}</td><td>${new Date(u.data_cadastro).toLocaleDateString()}</td><td>${u.total_listas_obtidas || 0}</td><td>${u.solicitacoes_aprovadas || 0}</td></tr>`;
+                    html += `<tr>
+                        <td>${u.nome}</span></td>
+                        <td>${u.email}</span></td>
+                        <td>${formatarTelefone(u.whatsapp)}</span></td>
+                        <td>${new Date(u.data_cadastro).toLocaleDateString()}</span></td>
+                        <td>${u.total_listas_obtidas || 0}</span></td>
+                        <td>${u.solicitacoes_aprovadas || 0}</span></td>
+                    </tr>`;
                 }
                 html += '</tbody></table>';
                 container.innerHTML = html;
             } catch(e) { console.error(e); showToast('Erro ao carregar relatório de usuários', true); }
         }
         
+        // ========== MURAL DE SCRIPTS ==========
+        
+        async function carregarScriptsAdmin() {
+            try {
+                const res = await fetch('/api/admin/scripts');
+                const scripts = await res.json();
+                const container = document.getElementById('listaScriptsAdmin');
+                if (!scripts.length) {
+                    container.innerHTML = '<div style="text-align:center;padding:30px;background:#f8f9fa;border-radius:16px;">📭 Nenhum script adicionado ainda. Use o formulário acima.</div>';
+                    return;
+                }
+                
+                let html = '';
+                for (const s of scripts) {
+                    const statusText = s.ativo == 1 ? '🟢 Ativo' : '🔴 Inativo';
+                    html += `
+                        <div class="card-lista" style="margin-bottom:15px;">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+                                <div style="flex:1;">
+                                    <h4 style="color:#CC092F;">📌 ${escapeHtml(s.titulo)}</h4>
+                                    <span class="badge" style="background:#666; color:white; padding:2px 8px; border-radius:12px; font-size:11px;">${escapeHtml(s.categoria)}</span>
+                                    <span class="badge" style="background:${s.ativo==1?'#27ae60':'#e74c3c'}; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">${statusText}</span>
+                                    <div style="margin-top:8px; font-size:12px; color:#666;">📅 ${new Date(s.criado_em).toLocaleDateString()}</div>
+                                    <div style="margin-top:8px; background:#f5f5f5; padding:8px; border-radius:8px; font-size:12px; max-height:80px; overflow-y:auto;">
+                                        ${escapeHtml(s.conteudo.substring(0, 150))}${s.conteudo.length > 150 ? '...' : ''}
+                                    </div>
+                                </div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                    <button onclick="editarScript(${s.id})" style="background-color:#f39c12;">✏️ Editar</button>
+                                    <button onclick="toggleScriptStatus(${s.id}, ${s.ativo == 1 ? 0 : 1})" style="background-color:${s.ativo == 1 ? '#e74c3c' : '#27ae60'};">${s.ativo == 1 ? '🔴 Desativar' : '🟢 Ativar'}</button>
+                                    <button onclick="excluirScript(${s.id})" style="background-color:#e74c3c;">🗑️ Excluir</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                container.innerHTML = html;
+            } catch(e) { console.error(e); }
+        }
+        
+        async function adicionarScript() {
+            const titulo = document.getElementById('novoScriptTitulo').value;
+            const categoria = document.getElementById('novoScriptCategoria').value;
+            const conteudo = document.getElementById('novoScriptConteudo').value;
+            
+            if (!titulo || !conteudo) {
+                showToast('Preencha título e conteúdo!', true);
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/admin/scripts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ titulo, conteudo, categoria })
+                });
+                if (res.ok) {
+                    showToast('✅ Script adicionado!');
+                    document.getElementById('novoScriptTitulo').value = '';
+                    document.getElementById('novoScriptConteudo').value = '';
+                    carregarScriptsAdmin();
+                } else {
+                    showToast('Erro ao adicionar', true);
+                }
+            } catch(e) { showToast('Erro!', true); }
+        }
+        
+        async function editarScript(id) {
+            const res = await fetch('/api/admin/scripts');
+            const scripts = await res.json();
+            const script = scripts.find(s => s.id == id);
+            if (!script) return;
+            
+            const novoTitulo = prompt('Editar título:', script.titulo);
+            if (!novoTitulo) return;
+            const novoConteudo = prompt('Editar conteúdo:', script.conteudo);
+            if (!novoConteudo) return;
+            const novaCategoria = prompt('Categoria (geral/taxas/roteiro/dicas/urgente):', script.categoria);
+            
+            try {
+                await fetch(`/api/admin/scripts/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ titulo: novoTitulo, conteudo: novoConteudo, categoria: novaCategoria || 'geral', ativo: script.ativo })
+                });
+                showToast('✅ Script atualizado!');
+                carregarScriptsAdmin();
+            } catch(e) { showToast('Erro!', true); }
+        }
+        
+        async function toggleScriptStatus(id, ativo) {
+            const res = await fetch('/api/admin/scripts');
+            const scripts = await res.json();
+            const script = scripts.find(s => s.id == id);
+            if (!script) return;
+            
+            try {
+                await fetch(`/api/admin/scripts/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ titulo: script.titulo, conteudo: script.conteudo, categoria: script.categoria, ativo: ativo })
+                });
+                showToast(ativo == 1 ? '✅ Script ativado!' : '🔴 Script desativado!');
+                carregarScriptsAdmin();
+            } catch(e) { showToast('Erro!', true); }
+        }
+        
+        async function excluirScript(id) {
+            if (!confirm('⚠️ Tem certeza que deseja excluir este script permanentemente?')) return;
+            try {
+                await fetch(`/api/admin/scripts/${id}`, { method: 'DELETE' });
+                showToast('🗑️ Script excluído!');
+                carregarScriptsAdmin();
+            } catch(e) { showToast('Erro!', true); }
+        }
+        
+        // ========== NAVEGAÇÃO ENTRE ABAS ==========
+        
         function switchTab(tab) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            
             document.getElementById(`tab-${tab}`).classList.add('active');
-            if (tab === 'fila') carregarFichas();
-            if (tab === 'listas') { carregarSolicitacoes(); carregarListasEstoque(); }
-            if (tab === 'usuarios') carregarUsuarios();
+            if (tab === 'fila') {
+                document.querySelector('.tab-btn:first-child').classList.add('active');
+                carregarFichas();
+            } else if (tab === 'listas') {
+                document.querySelectorAll('.tab-btn')[1].classList.add('active');
+                carregarSolicitacoes();
+                carregarListasEstoque();
+            } else if (tab === 'usuarios') {
+                document.querySelectorAll('.tab-btn')[2].classList.add('active');
+                carregarUsuarios();
+            } else if (tab === 'relatorios') {
+                document.querySelectorAll('.tab-btn')[3].classList.add('active');
+            } else if (tab === 'mural') {
+                document.querySelectorAll('.tab-btn')[4].classList.add('active');
+                carregarScriptsAdmin();
+            }
         }
+        
+        // ========== INICIALIZAÇÃO ==========
         
         verificarSessaoAdmin();
         connectSSE();
@@ -521,6 +729,10 @@
         window.carregarRelatorioAgendamentos = carregarRelatorioAgendamentos;
         window.exportarRelatorioCSV = exportarRelatorioCSV;
         window.carregarRelatorioUsuarios = carregarRelatorioUsuarios;
+        window.adicionarScript = adicionarScript;
+        window.editarScript = editarScript;
+        window.toggleScriptStatus = toggleScriptStatus;
+        window.excluirScript = excluirScript;
     </script>
 </body>
 </html>
